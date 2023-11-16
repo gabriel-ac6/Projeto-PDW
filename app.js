@@ -207,7 +207,7 @@ app.post('/login', async (req, res) => {
 });
 
 // Rota para fazer logout
-app.get('/logout', (req, res) => {
+app.post('/logout', (req, res) => {
   if (req.session.logado == true){
     req.session.destroy((err) => {
       if (err) {
@@ -250,7 +250,8 @@ app.post('/login-admin', async (req, res) => {
       if (tipoUsuario !== 'admin') {
           return res.status(401).json({ error: 'Esta rota é apenas para administradores' });
       }
-
+    req.session.id = userData.id;
+    console.log(  req.session.id);
       // Defina variáveis de sessão para administrador
       req.session.logadoAdmin = true;
       req.session.emailAdmin = Email;
@@ -385,6 +386,656 @@ app.delete('/excluir/:email', verificarAutenticacaoExclusao, async (req, res) =>
   }
 });
   
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+app.post('/items', async (req, res) => {
+  if (req.session.logado || req.session.logadoAdmin) {
+    try {
+      const { id, title, author, category, price, description, status, publicationDate, periodicity, quantity } = req.body;
+
+      var email = req.session.emailUsuario;
+
+      // Consulte o usuário pelo email no Firestore
+      const userDoc = await admin.firestore().collection('usuarios').doc(email).get();
+      const userData = userDoc.data();
+
+      const sellerId = userData.id;
+
+      // Verificar se todos os campos obrigatórios estão presentes
+      const requiredFields = ['id', 'title', 'author', 'category', 'price', 'description', 'status', 'publicationDate', 'periodicity', 'quantity'];
+      const missingFields = requiredFields.filter(field => !req.body[field]);
+
+      if (missingFields.length > 0) {
+        return res.status(400).json({ message: `Campos obrigatórios ausentes: ${missingFields.join(', ')}` });
+      }
+
+      // Verificar se a categoria existe na coleção de categorias
+      const categoryDoc = await admin.firestore().collection('categories').doc(category).get();
+      if (!categoryDoc.exists) {
+        return res.status(400).json({ message: 'Categoria não encontrada' });
+      }
+
+      const newItem = {
+        id,
+        title,
+        author,
+        category,
+        price,
+        description,
+        status,
+        publicationDate,
+        periodicity,
+        sellerId,
+        quantity
+      };
+
+      await db.collection('items').doc(id).set(newItem);
+
+      res.status(201).json({ message: 'Item adicionado com sucesso' });
+    } catch (error) {
+      console.error('Error adding item: ', error);
+      res.status(500).json({ message: 'Internal Server Error' });
+    }
+  } else {
+    // Se não estiver logado, retorne um erro de não autorizado
+    res.status(401).json({ error: 'Não autorizado. Faça login para acessar este recurso.' });
+  }
+});
+
+// GET /items - Listar todos os itens.
+app.get('/items', async (req, res) => {
+  if (req.session.logado || req.session.logadoAdmin) {
+  try {
+    const snapshot = await db.collection('items').get();
+    const items = snapshot.docs.map(doc => doc.data());
+    res.json(items);
+  } catch (error) {
+    console.error('Error getting items: ', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+}
+else{
+   // Se não estiver logado, retorne um erro de não autorizado
+   res.status(401).json({ error: 'Não autorizado. Faça login para acessar este recurso.' });
+}
+});
+
+// GET /items/{id} - Obter detalhes de um item específico.
+app.get('/items/:id', async (req, res) => {
+  if (req.session.logado || req.session.logadoAdmin) {
+  try {
+    const itemId = req.params.id;
+    const itemRef = db.collection('items').doc(itemId);
+    const item = await itemRef.get();
+
+    if (item.exists) {
+      res.json(item.data());
+    } else {
+      res.status(404).json({ message: 'Item not found' });
+    }
+  } catch (error) {
+    console.error('Error getting item: ', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+}
+else{
+  // Se não estiver logado, retorne um erro de não autorizado
+  res.status(401).json({ error: 'Não autorizado. Faça login para acessar este recurso.' });
+}
+});
+
+// PUT /items/{id} - Editar um item.
+app.put('/items/:id', async (req, res) => {
+  if (req.session.logado || req.session.logadoAdmin) {
+
+  try {
+    const itemId = req.params.id;
+    const updatedItem = req.body;
+
+    // Verificar se todos os campos obrigatórios estão presentes
+    const requiredFields = ['title', 'author', 'category', 'price', 'description', 'status', 'publicationDate', 'periodicity', 'quantity'];
+    const missingFields = requiredFields.filter(field => updatedItem[field] === undefined);
+
+    if (missingFields.length > 0) {
+      return res.status(400).json({ message: `Campos obrigatórios ausentes: ${missingFields.join(', ')}` });
+    }
+
+    // Remover o campo 'id' para garantir que não seja alterado
+    delete updatedItem.id;
+    delete updatedItem.sellerId;
+
+    const itemRef = db.collection('items').doc(itemId);
+    const snapshot = await itemRef.get();
+
+    if (!snapshot.exists) {
+      res.status(404).json({ message: 'Item not found' });
+      return;
+    }
+
+    await itemRef.update(updatedItem);
+    const updatedItemData = await itemRef.get();
+    res.json(updatedItemData.data());
+  } catch (error) {
+    console.error('Error updating item: ', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+}
+else {
+  // Se não estiver logado, retorne um erro de não autorizado
+  res.status(401).json({ error: 'Não autorizado. Faça login para acessar este recurso.' });
+}
+});
+
+
+// DELETE /items/{id} - Excluir permanentemente um item.
+app.delete('/items/:id', async (req, res) => {
+  if (req.session.logado || req.session.logadoAdmin) {
+  try {
+    const itemId = req.params.id;
+    const itemRef = db.collection('items').doc(itemId);
+
+    const snapshot = await itemRef.get();
+    if (!snapshot.exists) {
+      res.status(404).json({ message: 'Item not found' });
+      return;
+    }
+
+    // Excluir permanentemente o item
+    await itemRef.delete();
+    res.json({ message: 'Item deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting item: ', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+} else {
+  // Se não estiver logado, retorne um erro de não autorizado
+  res.status(401).json({ error: 'Não autorizado. Faça login para acessar este recurso.' });
+}
+});
+
+// GET /items/search - Buscar itens por critérios.
+app.get('/items/search', async (req, res) => {
+  if (req.session.logado || req.session.logadoAdmin) {
+  try {
+    const { category, maxPrice, status, author, publicationDate } = req.query;
+
+    let query = db.collection('items');
+
+    if (category) {
+      query = query.where('category', '==', category);
+    }
+
+    if (maxPrice) {
+      query = query.where('price', '<=', parseFloat(maxPrice));
+    }
+
+    if (status) {
+      query = query.where('status', '==', status);
+    }
+
+    if (author) {
+      query = query.where('author', '==', author);
+    }
+
+    if (publicationDate) {
+      query = query.where('publicationDate', '==', new Date(publicationDate));
+    }
+
+    const snapshot = await query.get();
+    const items = snapshot.docs.map(doc => doc.data());
+    res.json(items);
+  } catch (error) {
+    console.error('Error searching items: ', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+}
+  else {
+    // Se não estiver logado, retorne um erro de não autorizado
+    res.status(401).json({ error: 'Não autorizado. Faça login para acessar este recurso.' });
+  }
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// GET /categories - Listar todas as categorias.
+app.get('/categories', async (req, res) => {
+  try {
+    const snapshot = await db.collection('categories').get();
+    const categories = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    res.json(categories);
+  } catch (error) {
+    console.error('Error getting categories: ', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// POST /categories - Adicionar uma nova categoria.
+app.post('/categories', async (req, res) => {
+  if (req.session.logadoAdmin) {
+  try {
+    const { id, name, description } = req.body;
+
+    // Verificar se todos os campos obrigatórios estão presentes
+    const requiredFields = ['id', 'name', 'description'];
+    const missingFields = requiredFields.filter(field => req.body[field] === undefined);
+
+    if (missingFields.length > 0) {
+      return res.status(400).json({ message: `Campos obrigatórios ausentes: ${missingFields.join(', ')}` });
+    }
+
+    // Verificar se o ID da categoria já existe
+    const existingCategory = await db.collection('categories').doc(id).get();
+    if (existingCategory.exists) {
+      return res.status(400).json({ message: 'ID da categoria já existe, escolha outro ID' });
+    }
+    else{
+         // Cadastrar a nova categoria no Firestore
+       await db.collection('categories').doc(name).set({id, name, description });
+
+       res.status(201).json({ id, name, description });
+    }
+
+  } catch (error) {
+    console.error('Error adding category: ', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+}
+else{
+  res.status(420).json({ message: 'Para cadastrar uma nova categoria é preciso estar logado como administrador'});
+}
+});
+
+
+// PUT /categories/{id} - Editar uma categoria existente.
+app.put('/categories/:id', async (req, res) => {
+  if (req.session.logadoAdmin) {
+  try {
+    const categoryId = req.params.id;
+    const updatedCategory = req.body;
+
+    // Verificar se a categoria existe
+    const categoryRef = db.collection('categories').doc(categoryId);
+    const categoryDoc = await categoryRef.get();
+
+    if (!categoryDoc.exists) {
+      return res.status(404).json({ message: 'Categoria não encontrada' });
+    }
+  // Atualizar apenas os campos fornecidos
+  Object.keys(updatedCategory).forEach(field => {
+    if (updatedCategory[field] !== undefined) {
+      categoryDoc.ref.update({ [field]: updatedCategory[field] });
+    }
+  });
+
+  // Recuperar os dados atualizados da categoria
+  const updatedCategoryData = await categoryRef.get();
+  res.json(updatedCategoryData.data());
+
+  } catch (error) {
+    console.error('Error updating category: ', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+}
+else{
+  res.status(420).json({ message: 'Para cadastrar uma nova categoria é preciso estar logado como administrador'});
+}
+});
+
+
+// DELETE /categories/{id} - Excluir uma categoria.
+app.delete('/categories/:id', async (req, res) => {
+  if (req.session.logadoAdmin) {
+  try {
+    const categoryId = req.params.id;
+
+    // Excluir a categoria do Firestore
+    await db.collection('categories').doc(categoryId).delete();
+    res.json({ message: 'Categoria excluída com sucesso' });
+  } catch (error) {
+    console.error('Error deleting category: ', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+}
+else{
+  res.status(420).json({ message: 'Para cadastrar uma nova categoria é preciso estar logado como administrador'});
+}
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// POST /transactions - Registrar uma nova transação.
+app.post('/transactions', async (req, res) => {
+  if (req.session.logado || req.session.logadoAdmin) {
+  try {
+    const {itemId, transactionDate, transactionValue, quantity } = req.body;
+
+    // Verificar se todos os campos obrigatórios estão presentes
+    const requiredFields = ['itemId', 'transactionDate', 'transactionValue', 'quantity'];
+    const missingFields = requiredFields.filter(field => req.body[field] === undefined);
+
+    var email = req.session.emailUsuario;
+
+    // Consulte o usuário pelo email no Firestore
+    const userDoc = await admin.firestore().collection('usuarios').doc(email).get();
+   
+    const userData = userDoc.data();
+          
+    const buyerId = userData.id;
+
+    if (missingFields.length > 0) {
+      return res.status(400).json({ message: `Campos obrigatórios ausentes: ${missingFields.join(', ')}` });
+    }
+
+    // Verificar se o valor da transação é igual ao preço do item
+    const itemRef = db.collection('items').doc(itemId);
+    const itemSnapshot = await itemRef.get();
+
+    if (!itemSnapshot.exists) {
+      return res.status(404).json({ message: 'Item não encontrado' });
+    }
+
+    const itemData = itemSnapshot.data();
+    const itemPrice = itemData.price;
+    const sellerId = itemData.sellerId;
+
+    if (transactionValue !== itemPrice) {
+      return res.status(400).json({ message: 'Valor da transação deve ser igual ao preço do item' });
+    }
+
+    // Atualizar o número de exemplares (periodicity) e verificar se deve excluir o item
+    const updatedQuantity = itemData.quantity - quantity;
+    
+    if (updatedQuantity === 0) {
+      // Se o resultado for 0, excluir o item
+      await itemRef.delete();
+       // Registrar a nova transação no Firestore
+    const transactionData = {
+      buyerId,
+      sellerId,
+      itemId,
+      transactionDate,
+      transactionValue,
+      quantity
+    };
+
+    const docRef = await db.collection('transacoes').add(transactionData);
+    const addedTransaction = await docRef.get();
+    res.status(201).json(addedTransaction.data());
+    } else if (updatedQuantity <= 0){
+      res.send("Não possuimos está quantidade de livros no nosso")
+    }else {
+      // Se o resultado não for 0, apenas atualizar o número de exemplares
+      await itemRef.update({ quantity: updatedQuantity });
+    
+      // Registrar a nova transação no Firestore com buyerId como ID do documento
+      const transactionData = {
+        buyerId,
+        sellerId,
+        itemId,
+        transactionDate,
+        transactionValue,
+        quantity
+      };
+    
+      await db.collection('transacoes').add(transactionData);
+      res.status(201).json(transactionData);
+    }
+
+   
+  } catch (error) {
+    console.error('Error adding transaction: ', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+}
+else{
+    // Se não estiver logado, retorne um erro de não autorizado
+    res.status(401).json({ error: 'Não autorizado. Faça login para acessar este recurso.' });
+}
+});
+
+// GET /transactions/{userId} - Visualizar transações de um usuário específico.
+app.get('/transactions/:userId', async (req, res) => {
+  if (req.session.logadoAdmin) {
+  try {
+    const userId = req.params.userId;
+
+    // Buscar transações do usuário no Firestore
+    const querySnapshot = await db.collection('transacoes').where('buyerId', '==', userId).get();
+    const transactions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    res.json(transactions);
+  } catch (error) {
+    console.error('Error getting user transactions: ', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+}
+  else{
+     // Se não estiver logado, retorne um erro de não autorizado
+     res.status(401).json({ error: 'Não autorizado. Faça login para acessar este recurso.' });
+  }
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   const port = process.env.PORT || 3002;
   app.listen(port, () => {
     console.log(`Server is running on port ${port}`);
