@@ -425,7 +425,7 @@ app.delete('/excluir/:email', verificarAutenticacaoExclusao, async (req, res) =>
 
 
 app.post('/items', async (req, res) => {
-  if (req.session.logado || req.session.logadoAdmin) {
+  if (req.session.logado) {
     try {
       const { id, title, author, category, price, description, status, publicationDate, periodicity, quantity } = req.body;
 
@@ -522,7 +522,7 @@ else{
 
 // PUT /items/{id} - Editar um item.
 app.put('/items/:id', async (req, res) => {
-  if (req.session.logado || req.session.logadoAdmin) {
+  if (req.session.logado) {
 
   try {
     const itemId = req.params.id;
@@ -565,7 +565,7 @@ else {
 
 // DELETE /items/{id} - Excluir permanentemente um item.
 app.delete('/items/:id', async (req, res) => {
-  if (req.session.logado || req.session.logadoAdmin) {
+  if (req.session.logado) {
   try {
     const itemId = req.params.id;
     const itemRef = db.collection('items').doc(itemId);
@@ -591,7 +591,7 @@ app.delete('/items/:id', async (req, res) => {
 
 // GET /items/search - Buscar itens por critérios.
 app.get('/items/search', async (req, res) => {
-  if (req.session.logado || req.session.logadoAdmin) {
+  if (req.session.logado) {
   try {
     const { category, maxPrice, status, author, publicationDate } = req.query;
 
@@ -714,38 +714,37 @@ app.get('/categories', async (req, res) => {
 // POST /categories - Adicionar uma nova categoria.
 app.post('/categories', async (req, res) => {
   if (req.session.logadoAdmin) {
-  try {
-    const { id, name, description } = req.body;
+    try {
+      const { id, name, description } = req.body;
 
-    // Verificar se todos os campos obrigatórios estão presentes
-    const requiredFields = ['id', 'name', 'description'];
-    const missingFields = requiredFields.filter(field => req.body[field] === undefined);
+      // Verificar se todos os campos obrigatórios estão presentes
+      const requiredFields = ['id', 'name', 'description'];
+      const missingFields = requiredFields.filter(field => !req.body[field]);
 
-    if (missingFields.length > 0) {
-      return res.status(400).json({ message: `Campos obrigatórios ausentes: ${missingFields.join(', ')}` });
+      if (missingFields.length > 0) {
+        return res.status(400).json({ message: `Campos obrigatórios ausentes: ${missingFields.join(', ')}` });
+      }
+
+      // Verificar se o ID da categoria já existe
+      const existingCategory = await db.collection('categories').doc(id).get();
+      if (existingCategory.exists) {
+        return res.status(400).json({ message: 'ID da categoria já existe, escolha outro ID' });
+      }
+
+      // Cadastrar a nova categoria no Firestore
+      await db.collection('categories').doc(name).set({ id, name, description });
+
+      res.status(201).json({ id, name, description });
+
+    } catch (error) {
+      console.log(error);
+      res.status(500).json({ message: 'Erro interno do servidor' });
     }
-
-    // Verificar se o ID da categoria já existe
-    const existingCategory = await db.collection('categories').doc(id).get();
-    if (existingCategory.exists) {
-      return res.status(400).json({ message: 'ID da categoria já existe, escolha outro ID' });
-    }
-    else{
-         // Cadastrar a nova categoria no Firestore
-       await db.collection('categories').doc(name).set({id, name, description });
-
-       res.status(201).json({ id, name, description });
-    }
-
-  } catch (error) {
-    console.error('Error adding category: ', error);
-    res.status(500).json({ message: 'Internal Server Error' });
+  } else {
+    res.status(420).json({ message: 'Para cadastrar uma nova categoria, é preciso estar logado como administrador' });
   }
-}
-else{
-  res.status(420).json({ message: 'Para cadastrar uma nova categoria é preciso estar logado como administrador'});
-}
 });
+
 
 
 // PUT /categories/{id} - Editar uma categoria existente.
