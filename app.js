@@ -6,6 +6,9 @@ const firebase = require('firebase/app');
 const crypto = require('crypto');
 const session = require('express-session');
 
+app.use(bodyParser.urlencoded({ extended: true }));
+
+
 // Configuração do express-session
 app.use(session({
   secret: '123456',
@@ -386,6 +389,44 @@ app.delete('/excluir/:email', verificarAutenticacaoExclusao, async (req, res) =>
   }
 });
   
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 app.post('/items', async (req, res) => {
   if (req.session.logado) {
     try {
@@ -551,47 +592,116 @@ app.delete('/items/:id', async (req, res) => {
 }
 });
 
-// GET /items/search - Buscar itens por critérios.
-app.get('/items/search', async (req, res) => {
-  if (req.session.logado) {
+// Rota para buscar itens com base nos parâmetros fornecidos
+app.post('/items/search', async (req, res) => {
   try {
-    const { category, maxPrice, status, author, publicationDate } = req.query;
+    const queryParams = req.body;
+    let query = admin.firestore().collection('items');
 
-    let query = db.collection('items');
-
-    if (category) {
-      query = query.where('category', '==', category);
+    // Defina as condições de preço mínimo e máximo dinamicamente
+    const priceConditions = {};
+    if (queryParams.minPrice !== undefined) {
+      priceConditions['>='] = queryParams.minPrice;
     }
 
-    if (maxPrice) {
-      query = query.where('price', '<=', parseFloat(maxPrice));
+    if (queryParams.maxPrice !== undefined) {
+      priceConditions['<='] = queryParams.maxPrice;
     }
 
-    if (status) {
-      query = query.where('status', '==', status);
+    // Remova minPrice e maxPrice dos parâmetros para não interferir nas demais condições
+    delete queryParams.minPrice;
+    delete queryParams.maxPrice;
+
+    // Adicione as condições de preço à consulta
+    if (Object.keys(priceConditions).length > 0) {
+      query = query.where('price', ...Object.entries(priceConditions)[0]);
     }
 
-    if (author) {
-      query = query.where('author', '==', author);
-    }
+    // Construa a consulta com base nos parâmetros fornecidos
+    Object.keys(queryParams).forEach((param) => {
+      query = query.where(param, '==', queryParams[param]);
+    });
 
-    if (publicationDate) {
-      query = query.where('publicationDate', '==', new Date(publicationDate));
-    }
-
+    // Execute a consulta
     const snapshot = await query.get();
-    const items = snapshot.docs.map(doc => doc.data());
-    res.json(items);
+
+    // Mapeie os documentos para um array de objetos JavaScript
+    const items = snapshot.docs.map((doc) => doc.data());
+
+    res.json({ success: true, items });
   } catch (error) {
-    console.error('Error searching items: ', error);
-    res.status(500).json({ message: 'Internal Server Error' });
-  }
-}
-  else {
-    // Se não estiver logado, retorne um erro de não autorizado
-    res.status(401).json({ error: 'Não autorizado. Faça login para acessar este recurso.' });
+    console.error(error);
+    res.status(500).json({ success: false, error: 'Erro interno do servidor' });
   }
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 // GET /categories - Listar todas as categorias.
@@ -696,6 +806,82 @@ else{
   res.status(420).json({ message: 'Para cadastrar uma nova categoria é preciso estar logado como administrador'});
 }
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 // POST /transactions - Registrar uma nova transação.
@@ -808,6 +994,50 @@ app.get('/transactions/:userId', async (req, res) => {
      res.status(401).json({ error: 'Não autorizado. Faça login para acessar este recurso.' });
   }
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
   const port = process.env.PORT || 3002;
